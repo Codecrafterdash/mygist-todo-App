@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mygist - Collaborative To-Do List</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .dragging {
+      opacity: 0.5;
+      scale: 1.05;
+      transition: transform 0.2s ease;
+    }
+    .progress-ring {
+      transform: rotate(-90deg);
+      transition: stroke-dashoffset 0.5s ease;
+    }
+    .fade-enter {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    .fade-enter-active {
+      opacity: 1;
+      transform: translateY(0);
+      transition: all 0.3s ease;
+    }
+    .fade-out {
+      opacity: 1;
+      transform: translateX(0);
+      transition: all 0.3s ease;
+    }
+    .fade-out-active {
+      opacity: 0;
+      transform: translateX(20px);
+    }
+    .filter-active {
+      @apply bg-blue-500 text-white px-3 py-1 rounded-xl;
+    }
+  </style>
+</head>
+
+<body class="bg-gray-100 min-h-screen flex flex-col items-center justify-start py-10">
+  <div class="w-full max-w-md p-6 bg-white rounded-2xl shadow-xl animate-fade-in">
+    <h1 class="text-3xl font-bold text-gray-800 mb-2 text-center transition duration-300 ease-in-out">Mygist</h1>
+
+    <!-- Circular progress bar -->
+    <div class="flex justify-center mb-4">
+      <svg class="w-20 h-20">
+        <circle cx="40" cy="40" r="35" stroke="#e5e7eb" stroke-width="5" fill="none" />
+        <circle id="progressRing" class="progress-ring" cx="40" cy="40" r="35" stroke="#3b82f6" stroke-width="5" fill="none" stroke-linecap="round" stroke-dasharray="220" stroke-dashoffset="220" />
+        <text id="progressPercent" x="50%" y="50%" text-anchor="middle" dy=".3em" class="text-sm fill-gray-700">0%</text>
+      </svg>
+    </div>
+
+    <div class="flex gap-2 mb-4">
+      <input id="taskInput" type="text" placeholder="Add a task..." class="flex-1 px-4 py-2 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 transition duration-200">
+      <button id="addTask" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-xl text-xl font-bold transition duration-200">+</button>
+    </div>
+
+    <!-- Filter buttons -->
+    <div class="flex justify-around mb-4">
+      <button id="filterAll" onclick="setFilter('all')" class="text-blue-600 hover:underline transition">All</button>
+      <button id="filterActive" onclick="setFilter('active')" class="text-blue-600 hover:underline transition">Active</button>
+      <button id="filterCompleted" onclick="setFilter('completed')" class="text-blue-600 hover:underline transition">Completed</button>
+    </div>
+
+    <ul id="taskList" class="space-y-2 transition-all">
+      <!-- Tasks will appear here -->
+    </ul>
+  </div>
+
+  <script>
+    const taskInput = document.getElementById('taskInput');
+    const addTask = document.getElementById('addTask');
+    const taskList = document.getElementById('taskList');
+    const progressRing = document.getElementById('progressRing');
+    const progressPercent = document.getElementById('progressPercent');
+
+    const filterButtons = {
+      all: document.getElementById('filterAll'),
+      active: document.getElementById('filterActive'),
+      completed: document.getElementById('filterCompleted')
+    };
+
+    const sound = new Audio("https://www.myinstants.com/media/sounds/interface_click.mp3");
+
+    let tasks = JSON.parse(localStorage.getItem('mygistTasks')) || [];
+    let filter = 'all';
+
+    function saveTasks() {
+      localStorage.setItem('mygistTasks', JSON.stringify(tasks));
+    }
+
+    function updateFilterStyles() {
+      Object.keys(filterButtons).forEach(key => {
+        filterButtons[key].classList.remove('bg-blue-500', 'text-white', 'px-3', 'py-1', 'rounded-xl');
+      });
+      filterButtons[filter].classList.add('bg-blue-500', 'text-white', 'px-3', 'py-1', 'rounded-xl');
+    }
+
+    function setFilter(f) {
+      filter = f;
+      updateFilterStyles();
+      renderTasks();
+    }
+
+    function updateProgress() {
+      const total = tasks.length;
+      const completed = tasks.filter(t => t.completed).length;
+      const percent = total ? Math.round((completed / total) * 100) : 0;
+      const offset = 220 - (220 * percent / 100);
+      progressRing.style.strokeDashoffset = offset;
+      progressPercent.textContent = `${percent}%`;
+    }
+
+    function renderTasks() {
+      taskList.innerHTML = '';
+      tasks.forEach((task, index) => {
+        if (filter === 'completed' && !task.completed) return;
+        if (filter === 'active' && task.completed) return;
+
+        const li = document.createElement('li');
+        li.className = 'flex justify-between items-center bg-gray-200 px-4 py-2 rounded-xl shadow cursor-move transform transition duration-300 ease-in-out opacity-0 translate-y-2';
+        li.setAttribute('draggable', true);
+        li.setAttribute('data-index', index);
+
+        setTimeout(() => {
+          li.classList.remove('opacity-0', 'translate-y-2');
+        }, 10);
+
+        const span = document.createElement('span');
+        span.textContent = task.text;
+        span.className = task.completed ? 'line-through text-gray-500 flex-1 transition-colors' : 'text-gray-700 flex-1 transition-colors';
+        span.contentEditable = true;
+        span.onblur = () => {
+          tasks[index].text = span.textContent.trim();
+          saveTasks();
+        };
+
+        const completeBtn = document.createElement('input');
+        completeBtn.type = 'checkbox';
+        completeBtn.checked = task.completed;
+        completeBtn.className = 'mr-2';
+        completeBtn.onchange = () => {
+          tasks[index].completed = completeBtn.checked;
+          saveTasks();
+          sound.play();
+          renderTasks();
+        };
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.innerHTML = '✕';
+        deleteBtn.className = 'text-red-500 hover:text-red-700 font-bold ml-4 transition';
+        deleteBtn.onclick = () => {
+          li.classList.add('fade-out-active');
+          setTimeout(() => {
+            tasks.splice(index, 1);
+            saveTasks();
+            sound.play();
+            renderTasks();
+          }, 300);
+        };
+
+        li.appendChild(completeBtn);
+        li.appendChild(span);
+        li.appendChild(deleteBtn);
+        taskList.appendChild(li);
+
+        li.addEventListener('dragstart', () => li.classList.add('dragging'));
+        li.addEventListener('dragend', () => li.classList.remove('dragging'));
+      });
+      updateProgress();
+    }
+
+    addTask.addEventListener('click', () => {
+      const task = taskInput.value.trim();
+      if (task !== '') {
+        tasks.push({ text: task, completed: false });
+        saveTasks();
+        taskInput.value = '';
+        sound.play();
+        renderTasks();
+      }
+    });
+
+    taskList.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      const afterElement = getDragAfterElement(taskList, e.clientY);
+      const dragging = document.querySelector('.dragging');
+      if (afterElement == null) {
+        taskList.appendChild(dragging);
+      } else {
+        taskList.insertBefore(dragging, afterElement);
+      }
+    });
+
+    taskList.addEventListener('drop', () => {
+      const newOrder = [...taskList.children].map((child) => {
+        const text = child.querySelector('span').textContent.trim();
+        const completed = child.querySelector('input[type="checkbox"]').checked;
+        return { text, completed };
+      });
+      tasks = newOrder;
+      saveTasks();
+      sound.play();
+      renderTasks();
+    });
+
+    function getDragAfterElement(container, y) {
+      const draggableElements = [...container.querySelectorAll('li:not(.dragging)')];
+      return draggableElements.reduce((closest, child) => {
+        const box = child.getBoundingClientRect();
+        const offset = y - box.top - box.height / 2;
+        if (offset < 0 && offset > closest.offset) {
+          return { offset: offset, element: child };
+        } else {
+          return closest;
+        }
+      }, { offset: Number.NEGATIVE_INFINITY }).element;
+    }
+
+    setFilter(filter); // initialize
+  </script>
+</body>
+
+</html>
